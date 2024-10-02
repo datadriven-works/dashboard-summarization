@@ -96,7 +96,7 @@ This is configured to support deployment to multiple Looker instances reusing th
    ```bash
    npm run start
    ```
-	Your development server should be running at http://localhost:5000
+	Your development server should be running at http://localhost:5001
 
 #### Deployment
 
@@ -245,7 +245,7 @@ WEBSOCKET_SERVICE=<Required: Cloud run endpoint url>
             use_form_submit: yes
             core_api_methods: ["run_inline_query","all_lookml_models","dashboard","dashboard_dashboard_elements"]
             external_api_urls: [
-           "YOUR CLOUD RUN URL","http://localhost:5000","http://localhost:3000","https://*.googleapis.com","https://slack.com/api/*","https://slack.com/*"
+           "YOUR CLOUD RUN URL","http://localhost:5001","http://localhost:3000","https://*.googleapis.com","https://slack.com/api/*","https://slack.com/*"
           ]
             oauth2_urls: [
               "https://accounts.google.com/o/oauth2/v2/auth",

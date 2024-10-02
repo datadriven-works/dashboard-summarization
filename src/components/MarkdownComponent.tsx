@@ -48,15 +48,21 @@ const MarkdownComponent = ({data}) => {
                 )
             },
             li(props) {
-                const {children, className, node, ...rest} = props
+                const { children, className, node, ordered, ...rest } = props;
+                
+                // Remove ordered if it's a boolean value or set it to a valid string
+                const liProps = { ...rest };
+                if (typeof ordered === 'boolean') {
+                    liProps.ordered = ordered ? 'true' : undefined;
+                }
+            
                 return (
-                    <>
-                    <li className="customList" {...rest}>
+                    <li className="customList" {...liProps}>
                         {children}
                     </li>
-                    </>
-                    )
-                },
+                );
+            },
+            
                 hr(props) {
                     const {children, className, node, ...rest} = props
                     return (
