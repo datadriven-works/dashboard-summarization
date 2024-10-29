@@ -494,7 +494,7 @@ export const DashboardSummarization: React.FC = () => {
                   width: "30%",
                 }}
               >
-                Actions
+                {/* Actions */}
               </span>
               <div
                 style={{
@@ -563,6 +563,7 @@ export const DashboardSummarization: React.FC = () => {
                       fontSize: "0.9rem",
                       opacity: !loading ? 0.8 : 0.2,
                       paddingRight: "0.8rem",
+                      display: "none",
                     }}
                   >
                     Edit
