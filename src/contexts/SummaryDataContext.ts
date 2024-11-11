@@ -24,6 +24,20 @@ SOFTWARE.
 
 */
 
-import { useState, createContext } from "react";
+import { createContext } from "react";
 
-export const SummaryDataContext = createContext();
+interface SummaryDataContextType {
+  data: any[];
+  setData: React.Dispatch<React.SetStateAction<any[]>>;
+  formattedData: string;
+  setFormattedData: React.Dispatch<React.SetStateAction<string>>;
+  info: boolean;
+  setInfo: React.Dispatch<React.SetStateAction<boolean>>;
+  message: string;
+  setMessage: React.Dispatch<React.SetStateAction<string>>;
+  setDashboardURL: (url: string) => void;
+}
+
+export const SummaryDataContext = createContext<
+  SummaryDataContextType | undefined
+>(undefined);
