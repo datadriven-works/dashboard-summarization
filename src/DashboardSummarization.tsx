@@ -53,6 +53,17 @@ interface DashboardMetadata {
   };
 }
 
+interface Listener {
+  field: string;
+  dashboard_filter_name: string;
+}
+
+interface DataItem {
+  listen: Listener[];
+}
+
+type DashboardFilters = { [key: string]: any };
+
 export const DashboardSummarization: React.FC = () => {
   const { extensionSDK, tileHostData, core40SDK } =
     useContext(ExtensionContext);
@@ -63,6 +74,10 @@ export const DashboardSummarization: React.FC = () => {
     useState<boolean>(false);
   const [isConnected, setIsConnected] = useState(socket.connected);
   const [refinedData, setRefinedData] = useState([]);
+  const context = useContext(SummaryDataContext);
+  if (!context) {
+    throw new Error("SummaryDataContext must be used within a provider");
+  }
   const {
     data,
     setData,
@@ -73,19 +88,20 @@ export const DashboardSummarization: React.FC = () => {
     message,
     setMessage,
     setDashboardURL,
-  } = useContext(SummaryDataContext);
+  } = context;
+
   const [loading, setLoading] = useState(false);
   const workspaceOauth = useWorkspaceOauth();
   const slackOauth = useSlackOauth();
   const containerRef = React.useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    function onConnect(value) {
-      console.log("Connected!!", value);
+    function onConnect() {
+      console.log("Connected!!");
       setIsConnected(true);
     }
 
-    function onDisconnect(value) {
+    function onDisconnect(value: string) {
       console.log("Disconnected: ", value);
       setIsConnected(false);
     }
@@ -102,8 +118,11 @@ export const DashboardSummarization: React.FC = () => {
     function onRefineEvent(value: string) {
       // need this conditional to make sure that headers aren't included in the li elements generated
       setRefinedData(JSON.parse(value));
-      document.getElementById("overlay").style.zIndex = 10;
-      document.getElementById("overlay").style.opacity = 1;
+      const ovelayElement = document.getElementById("overlay");
+      if (ovelayElement) {
+        ovelayElement.style.zIndex = "10";
+        ovelayElement.style.opacity = "1";
+      }
     }
 
     function onComplete(event: string) {
@@ -137,7 +156,11 @@ export const DashboardSummarization: React.FC = () => {
     }
   }, [dashboardFilters]);
 
-  const applyFilterToListeners = (data, filters, dashboardFilters) => {
+  const applyFilterToListeners = (
+    data: DataItem[],
+    filters: Filters,
+    dashboardFilters: DashboardFilters
+  ) => {
     if (dashboardFilters !== null) {
       const filterListeners = data.filter((item) => item.listen.length > 0);
       // loop through each filter listener
@@ -177,7 +200,7 @@ export const DashboardSummarization: React.FC = () => {
             .filter((d) => d.query !== null || d.result_maker !== null)
             .map((data) => {
               const { query, note_text, title } = data;
-              if (data.query !== null) {
+              if (query !== null && query !== undefined) {
                 const {
                   fields,
                   dynamic_fields,
@@ -192,9 +215,9 @@ export const DashboardSummarization: React.FC = () => {
                   subtotals,
                 } = query;
                 const newFilters = applyFilterToListeners(
-                  data.result_maker?.filterables,
+                  data.result_maker?.filterables as any,
                   filters || {},
-                  dashboardFilters
+                  dashboardFilters as any
                 );
                 return {
                   queryBody: {
@@ -213,7 +236,10 @@ export const DashboardSummarization: React.FC = () => {
                   note_text,
                   title,
                 };
-              } else if (data.result_maker!.query !== null) {
+              } else if (
+                data.result_maker!.query !== null &&
+                data.result_maker!.query !== undefined
+              ) {
                 const {
                   fields,
                   dynamic_fields,
@@ -228,9 +254,9 @@ export const DashboardSummarization: React.FC = () => {
                   subtotals,
                 } = data.result_maker!.query;
                 const newFilters = applyFilterToListeners(
-                  data.result_maker?.filterables,
+                  data.result_maker?.filterables as any,
                   filters || {},
-                  dashboardFilters
+                  dashboardFilters as any
                 );
                 return {
                   queryBody: {
@@ -261,6 +287,7 @@ export const DashboardSummarization: React.FC = () => {
           setMessage(
             "Loaded Dashboard Metadata. Click 'Summarize Dashboard' to Generate report summary."
           );
+          extensionSDK.rendered();
         });
       if (!loadingDashboardMetadata) {
         await extensionSDK.localStorageSetItem(
@@ -340,8 +367,11 @@ export const DashboardSummarization: React.FC = () => {
         <div
           id={"overlay"}
           onClick={() => {
-            document.getElementById("overlay").style.zIndex = -10;
-            document.getElementById("overlay").style.opacity = 0;
+            const overlayElement = document.getElementById("overlay");
+            if (overlayElement) {
+              overlayElement.style.zIndex = "-10";
+              overlayElement.style.opacity = "0";
+            }
           }}
           style={{
             position: "absolute",
@@ -375,7 +405,7 @@ export const DashboardSummarization: React.FC = () => {
                   {value["query_title"]}
                 </p>
                 <span style={{ opacity: "0.8" }}>
-                  {value["key_points"].join("\n")}
+                  {(value["key_points"] as string[]).join("\n")}
                 </span>
               </div>
             ))}
