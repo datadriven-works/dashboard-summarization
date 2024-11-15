@@ -353,6 +353,42 @@ export const DashboardSummarization: React.FC = () => {
   }, [fetchQueryMetadata]);
 
   useEffect(() => {
+    const fetchDashboard = async () => {
+      const dashboard = await core40SDK.ok(
+        core40SDK.dashboard(tileHostData.dashboardId as string)
+      );
+      return dashboard.dashboard_elements?.length;
+    };
+
+    const checkAndUpdateElementCount = async () => {
+      const currentElementCount = await fetchDashboard();
+      const storedElementCount = await extensionSDK.localStorageGetItem(
+        `${dashboardId}_elementCount`
+      );
+      const storedCount = parseInt(storedElementCount || "0", 10);
+
+      if (storedCount && currentElementCount !== storedCount) {
+        await extensionSDK.localStorageRemoveItem(
+          `${dashboardId}:${JSON.stringify(dashboardFilters)}`
+        );
+        await extensionSDK.localStorageSetItem(
+          `${dashboardId}_elementCount`,
+          currentElementCount?.toString()
+        );
+      } else {
+        await extensionSDK.localStorageSetItem(
+          `${dashboardId}_elementCount`,
+          currentElementCount?.toString()
+        );
+      }
+    };
+
+    if (tileHostData.dashboardId) {
+      checkAndUpdateElementCount();
+    }
+  }, [tileHostData]);
+
+  useEffect(() => {
     if (containerRef.current) {
       containerRef.current.scrollTo({
         top: containerRef.current.scrollHeight,
