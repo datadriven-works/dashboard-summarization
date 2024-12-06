@@ -38,12 +38,23 @@ interface DashboardMetadata {
   dashboardFilters: Filters | undefined;
   dashboardId: string | undefined;
   queries: {
-    id: any;
-    fields: any;
-    view: any;
-    model: any;
-    dynamic_fields?: any;
+    queryBody: {
+      fields: string[] | null | undefined;
+      dynamic_fields: string | null | undefined;
+      view: string;
+      model: string;
+      filters: Filters;
+      pivots: string[] | null | undefined;
+      sorts: string[] | null | undefined;
+      limit: string | null | undefined;
+      column_limit: string | null | undefined;
+      row_total: string | null | undefined;
+      subtotals: string[] | null | undefined;
+    };
+    note_text: string | null | undefined;
+    title: string | null | undefined;
   }[];
+  description: string | undefined | null;
   indexedFilters: {
     [key: string]: {
       dimension: string;
@@ -353,40 +364,62 @@ export const DashboardSummarization: React.FC = () => {
   }, [fetchQueryMetadata]);
 
   useEffect(() => {
-    const fetchDashboard = async () => {
-      const dashboard = await core40SDK.ok(
-        core40SDK.dashboard(tileHostData.dashboardId as string)
-      );
-      return dashboard.dashboard_elements?.length;
+    const fetchDashboardMetadata = async () => {
+      const dashboardMetadata = {
+        dashboardFilters: dashboardFilters,
+        dashboardId: tileHostData.dashboardId,
+        queries: await core40SDK
+          .ok(
+            core40SDK.dashboard_dashboard_elements(
+              tileHostData.dashboardId as string,
+              "query,result_maker,note_text,title,query_id"
+            )
+          )
+          .then((elements) =>
+            elements
+              .filter((element) => element.query || element.result_maker)
+              .map((element) => {
+                const { query, note_text, title } = element;
+                return {
+                  queryBody: query || element.result_maker?.query,
+                  note_text,
+                  title,
+                };
+              })
+          ),
+        description: await core40SDK
+          .ok(
+            core40SDK.dashboard(
+              tileHostData.dashboardId as string,
+              "description"
+            )
+          )
+          .then((res) => res.description),
+      };
+      return JSON.stringify(dashboardMetadata);
     };
 
-    const checkAndUpdateElementCount = async () => {
-      const currentElementCount = await fetchDashboard();
-      const storedElementCount = await extensionSDK.localStorageGetItem(
-        `${dashboardId}_elementCount`
+    const checkAndUpdateDashboardMetadata = async () => {
+      const currentMetadata = await fetchDashboardMetadata();
+      const storedMetadata = await extensionSDK.localStorageGetItem(
+        `${tileHostData.dashboardId}:${JSON.stringify(dashboardFilters)}`
       );
-      const storedCount = parseInt(storedElementCount || "0", 10);
 
-      if (storedCount && currentElementCount !== storedCount) {
+      if (storedMetadata !== currentMetadata) {
         await extensionSDK.localStorageRemoveItem(
-          `${dashboardId}:${JSON.stringify(dashboardFilters)}`
+          `${tileHostData.dashboardId}:${JSON.stringify(dashboardFilters)}`
         );
         await extensionSDK.localStorageSetItem(
-          `${dashboardId}_elementCount`,
-          currentElementCount?.toString()
-        );
-      } else {
-        await extensionSDK.localStorageSetItem(
-          `${dashboardId}_elementCount`,
-          currentElementCount?.toString()
+          `${tileHostData.dashboardId}:${JSON.stringify(dashboardFilters)}`,
+          currentMetadata
         );
       }
     };
 
     if (tileHostData.dashboardId) {
-      checkAndUpdateElementCount();
+      checkAndUpdateDashboardMetadata();
     }
-  }, [tileHostData]);
+  }, [tileHostData, dashboardFilters, core40SDK, extensionSDK]);
 
   useEffect(() => {
     if (containerRef.current) {
@@ -396,6 +429,66 @@ export const DashboardSummarization: React.FC = () => {
       });
     }
   }, [data]);
+
+  const handleQueryExecution = async () => {
+    setLoading(true);
+    try {
+      const querySummaries = [];
+      if (dashboardMetadata && dashboardMetadata.queries) {
+        for (const query of dashboardMetadata.queries) {
+          const queryData = await core40SDK.ok(
+            core40SDK.run_inline_query({
+              body: query.queryBody,
+              result_format: "csv",
+              cache: true,
+              apply_formatting: true,
+              limit: 200,
+            })
+          );
+
+          const context = `
+                          ### Dashboard Detail
+                          ${dashboardMetadata.description || ""}
+
+                          ### Query Details
+                          - **Query Title:** ${query.title}
+                          - ${
+                            query.note_text !== "" && query.note_text !== null
+                              ? `**Query Note:** ${
+                                  query.note_text ||
+                                  "Return a summary of the data in markdown format."
+                                }`
+                              : "No query note provided."
+                          }
+                          - **Query Fields:** ${query.queryBody.fields}
+                          - **Query Data:** ${queryData}
+                        `;
+          querySummaries.push({ context });
+        }
+
+        socket.emit("my event", JSON.stringify({ querySummaries }));
+      } else {
+        console.error(
+          "dashboardMetadata or dashboardMetadata.queries is undefined"
+        );
+        setLoading(false);
+      }
+    } catch (error) {
+      console.log("error to run consults", error);
+      setLoading(false);
+    }
+
+    // console.log(queriesArray);
+    // socket.emit(
+    //   "my event",
+    //   JSON.stringify({
+    //     ...dashboardMetadata,
+    //     instance: extensionSDK.lookerHostData?.hostOrigin
+    //       ?.split("https://")[1]
+    //       .split(".")[0],
+    //   })
+    // );
+  };
 
   return (
     <div style={{ height: "100vh", width: "100%" }}>
@@ -509,18 +602,7 @@ export const DashboardSummarization: React.FC = () => {
                 className="button"
                 style={{ lineHeight: "20px", padding: "6px 16px" }}
                 disabled={loading || !socket.connected}
-                onClick={() => {
-                  setLoading(true);
-                  socket.emit(
-                    "my event",
-                    JSON.stringify({
-                      ...dashboardMetadata,
-                      instance: extensionSDK.lookerHostData?.hostOrigin
-                        ?.split("https://")[1]
-                        .split(".")[0],
-                    })
-                  );
-                }}
+                onClick={handleQueryExecution}
               >
                 {loading ? "Generating" : "Generate"}{" "}
                 <img
