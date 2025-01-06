@@ -433,9 +433,8 @@ export const DashboardSummarization: React.FC = () => {
   const handleQueryExecution = async () => {
     setLoading(true);
     try {
-      const querySummaries = [];
       if (dashboardMetadata && dashboardMetadata.queries) {
-        for (const query of dashboardMetadata.queries) {
+        const queryPromises = dashboardMetadata.queries.map(async (query) => {
           const queryData = await core40SDK.ok(
             core40SDK.run_inline_query({
               body: query.queryBody,
@@ -446,26 +445,28 @@ export const DashboardSummarization: React.FC = () => {
             })
           );
 
-          const context = `
-                          ### Dashboard Detail
-                          ${dashboardMetadata.description || ""}
+          return {
+            context: `
+              ### Dashboard Detail
+              ${dashboardMetadata.description || ""}
+  
+              ### Query Details
+              - **Query Title:** ${query.title}
+              - ${
+                query.note_text !== "" && query.note_text !== null
+                  ? `**Query Note:** ${
+                      query.note_text ||
+                      "Return a summary of the data in markdown format."
+                    }`
+                  : "No query note provided."
+              }
+              - **Query Fields:** ${query.queryBody.fields}
+              - **Query Data:** ${queryData}
+            `,
+          };
+        });
 
-                          ### Query Details
-                          - **Query Title:** ${query.title}
-                          - ${
-                            query.note_text !== "" && query.note_text !== null
-                              ? `**Query Note:** ${
-                                  query.note_text ||
-                                  "Return a summary of the data in markdown format."
-                                }`
-                              : "No query note provided."
-                          }
-                          - **Query Fields:** ${query.queryBody.fields}
-                          - **Query Data:** ${queryData}
-                        `;
-          querySummaries.push({ context });
-        }
-
+        const querySummaries = await Promise.all(queryPromises);
         socket.emit("my event", JSON.stringify({ querySummaries }));
       } else {
         console.error(
