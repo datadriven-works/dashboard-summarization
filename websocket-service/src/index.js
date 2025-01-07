@@ -29,7 +29,7 @@ const app = express();
 const http = require('http');
 const server = http.createServer(app);
 const { Server } = require('socket.io')
-const {VertexAI} = require('@google-cloud/vertexai');
+const { VertexAI } = require('@google-cloud/vertexai');
 const { LookerNodeSDK, NodeSettingsIniFile } = require('@looker/sdk-node');
 const dotenv = require('dotenv');
 dotenv.config();
@@ -47,36 +47,36 @@ app.get('/', (req, res) => {
     res.send('<h1>Hello world</h1>');
 });
 
-async function runLookerQuery(sdk,data) {
+async function runLookerQuery(sdk, data) {
     try {
         const query = await sdk.ok(sdk.create_query(data))
-        const { model, view, fields, pivots, fill_fields, filters, sorts, limit, column_limit, total, row_total, subtotals, dynamic_fields} = query
+        const { model, view, fields, pivots, fill_fields, filters, sorts, limit, column_limit, total, row_total, subtotals, dynamic_fields } = query
         const value = await sdk.ok(sdk.run_inline_query({
-            body: { model, view, fields, pivots, fill_fields, filters, sorts, limit: 200, column_limit, total, row_total, subtotals, dynamic_fields},
+            body: { model, view, fields, pivots, fill_fields, filters, sorts, limit: 200, column_limit, total, row_total, subtotals, dynamic_fields },
             result_format: 'csv',
             cache: true,
             apply_formatting: true,
-            limit:200
+            limit: 200
         }))
-        
+
         return value
-    } catch(e) {
+    } catch (e) {
         console.log('There was an error calling Looker: ', e)
     }
 }
 
 
 // Initialize Vertex with your Cloud project and location
-const vertexAI = new VertexAI({project: process.env.PROJECT, location: process.env.REGION});
+const vertexAI = new VertexAI({ project: process.env.PROJECT, location: process.env.REGION });
 // Instantiate the model
 const generativeModel = vertexAI.getGenerativeModel({
     model: 'gemini-1.0-pro-001',
-    generation_config: {max_output_tokens: 2500, temperature: 0.4, candidate_count: 1}
+    generation_config: { max_output_tokens: 2500, temperature: 0.4, candidate_count: 1 }
 });
 
 const writeStructuredLog = (message) => {
     // Complete a structured log entry.
-   return {
+    return {
         severity: 'INFO',
         message: message,
         // Log viewer accesses 'component' as 'jsonPayload.component'.
@@ -86,28 +86,28 @@ const writeStructuredLog = (message) => {
 
 
 io.on('connection', async (socket) => {
-  console.log("initial transport", socket.conn.transport.name); // prints "polling"
+    console.log("initial transport", socket.conn.transport.name); // prints "polling"
 
-  socket.conn.once("upgrade", () => {
-    // called when the transport is upgraded (i.e. from HTTP long-polling to WebSocket)
-    console.log("upgraded transport", socket.conn.transport.name); // prints "websocket"
-  });
+    socket.conn.once("upgrade", () => {
+        // called when the transport is upgraded (i.e. from HTTP long-polling to WebSocket)
+        console.log("upgraded transport", socket.conn.transport.name); // prints "websocket"
+    });
 
-  
-  socket.on('my event', async (data) => {
-    // setup looker sdk
-    // Ignore any SDK environment variables for the node runtime
-    const settings = new NodeSettingsIniFile('','looker.ini',JSON.parse(data).instance)
-    const sdk = LookerNodeSDK.init40(settings)
 
-    const querySummaries = []
-    for (const query of JSON.parse(data).queries) {
-        const queryData = await runLookerQuery(sdk,query.queryBody)
-    
+    socket.on('my event', async (data) => {
+        // setup looker sdk
+        // Ignore any SDK environment variables for the node runtime
+        const querySummariesContext = data.querySummaries;
+
+
+        const querySummaries = []
+        for (const query of querySummariesContext) {
+
             const context = `
-            Dashboard Detail: ${JSON.parse(data).description || ''} \n
-            Query Details:  "Query Title: ${query.title} \n ${query.note_text !== '' || query.note_text !== null ? "Query Note: " + query.note_text : ''} \n Query Fields: ${query.queryBody.fields} \n Query Data: ${queryData} \n"
+            Dashboard Detail: ${query.queryDescription || ''} \n
+            Query Details:  "Query Title: ${query.queryTitle} \n ${query.queryNote !== '' || query.queryNote !== null ? "Query Note: " + query.queryNote : ''} \n Query Fields: ${query.queryFields} \n Query Data: ${query.queryData} \n"
             `
+
             const queryPrompt = `
             You are a specialized answering assistant that can summarize a Looker dashboard and the underlying data and propose operational next steps drawing conclusions from the Query Details listed above. Follow the instructions below:
 
@@ -165,44 +165,44 @@ io.on('connection', async (socket) => {
             const prompt = {
                 contents: [
                     {
-                        role: 'user', parts:[
+                        role: 'user', parts: [
                             {
                                 text: queryPrompt
                             }
                         ]
                     }
                 ]
-        }
-        
-        
-        const streamingResp = await generativeModel.generateContentStream(prompt)
-        
-        for await (const item of streamingResp.stream) {
-            if(item.candidates[0].content.parts[0].text !== null) {
-                const formattedString = item.candidates[0].content.parts[0].text.split('\n').map(item => item.trim()).join('\n')
-                socket.emit('my broadcast event', formattedString)
-                
             }
-        }
-        
-        const queryResponse = await streamingResp.response
-        querySummaries.push(
-            JSON.stringify(queryResponse.candidates[0].content.parts[0].text)
+
+
+            const streamingResp = await generativeModel.generateContentStream(prompt)
+
+            for await (const item of streamingResp.stream) {
+                if (item.candidates[0].content.parts[0].text !== null) {
+                    const formattedString = item.candidates[0].content.parts[0].text.split('\n').map(item => item.trim()).join('\n')
+                    socket.emit('my broadcast event', formattedString)
+
+                }
+            }
+
+            const queryResponse = await streamingResp.response
+            querySummaries.push(
+                JSON.stringify(queryResponse.candidates[0].content.parts[0].text)
             )
-            
+
             // log billable characters for price monitoring
             console.log(
                 JSON.stringify(
                     writeStructuredLog(
-                        { 
-                            input_characters: (await generativeModel.countTokens(prompt)).totalBillableCharacters, 
-                            output_characters: (await generativeModel.countTokens({ contents: queryResponse.candidates[0].content })).totalBillableCharacters 
+                        {
+                            input_characters: (await generativeModel.countTokens(prompt)).totalBillableCharacters,
+                            output_characters: (await generativeModel.countTokens({ contents: queryResponse.candidates[0].content })).totalBillableCharacters
                         }
                     )
                 )
             )
-                    
-    }
+
+        }
 
         // construct final prompt
         const finalPromptData = `
@@ -233,31 +233,31 @@ io.on('connection', async (socket) => {
         ]
         '''
         `
-                            
+
         const finalPrompt = {
-            contents: [{ role: 'user', parts: [{ text: finalPromptData}]}]
+            contents: [{ role: 'user', parts: [{ text: finalPromptData }] }]
         }
-                            
+
         const formattedResp = await generativeModel.generateContent(finalPrompt)
-                        
+
         // log character counts for price monitoring
         const formattedRespParsed = formattedResp.response.candidates[0].content.parts[0].text.substring(formattedResp.response.candidates[0].content.parts[0].text.indexOf("[")).replace(/^`+|`+$/g, '').trim()
-        socket.emit("complete",formattedRespParsed)
+        socket.emit("complete", formattedRespParsed)
         console.log(
             JSON.stringify(
                 writeStructuredLog(
-                    { 
-                        input_characters: (await generativeModel.countTokens(finalPrompt)).totalBillableCharacters, 
+                    {
+                        input_characters: (await generativeModel.countTokens(finalPrompt)).totalBillableCharacters,
                         output_characters: (await generativeModel.countTokens({ contents: formattedResp.response.candidates[0].content })).totalBillableCharacters
                     }
                 )
             )
-        )                               
-            
+        )
+
     },
-    socket.on('refine',async (data) => {
-        const summary = JSON.parse(data)
-        const refinePromptData = `The following text represents summaries of a given dashboard's data. \n
+        socket.on('refine', async (data) => {
+            const summary = JSON.parse(data)
+            const refinePromptData = `The following text represents summaries of a given dashboard's data. \n
         Summaries 
         ----------
         ${summary} \n
@@ -295,44 +295,44 @@ io.on('connection', async (socket) => {
         ]
         '''
         `
-                            
-        const refinePrompt = {
-            contents: [{ role: 'user', parts: [{ text: refinePromptData}]}]
-        }
-                            
-        const formattedResp = await generativeModel.generateContentStream(refinePrompt)
-        
-        const queryResponse = await formattedResp.response
+
+            const refinePrompt = {
+                contents: [{ role: 'user', parts: [{ text: refinePromptData }] }]
+            }
+
+            const formattedResp = await generativeModel.generateContentStream(refinePrompt)
+
+            const queryResponse = await formattedResp.response
             // log billable characters for price monitoring
             console.log(
                 JSON.stringify(
                     writeStructuredLog(
-                        { 
-                            input_characters: (await generativeModel.countTokens(refinePrompt)).totalBillableCharacters, 
-                            output_characters: (await generativeModel.countTokens({ contents: queryResponse.candidates[0].content })).totalBillableCharacters 
+                        {
+                            input_characters: (await generativeModel.countTokens(refinePrompt)).totalBillableCharacters,
+                            output_characters: (await generativeModel.countTokens({ contents: queryResponse.candidates[0].content })).totalBillableCharacters
                         }
                     )
                 )
             )
-        const queryResponseParsed = queryResponse.candidates[0].content.parts[0].text.substring(queryResponse.candidates[0].content.parts[0].text.indexOf("[")).replace(/^`+|`+$/g, '').trim()
-        socket.emit('my refine event',queryResponseParsed)
-        socket.emit('complete',queryResponseParsed)
-    })
-)
+            const queryResponseParsed = queryResponse.candidates[0].content.parts[0].text.substring(queryResponse.candidates[0].content.parts[0].text.indexOf("[")).replace(/^`+|`+$/g, '').trim()
+            socket.emit('my refine event', queryResponseParsed)
+            socket.emit('complete', queryResponseParsed)
+        })
+    )
 
-  
-                                
-  socket.on('connect', () => {
-    console.log("Connected!")
-    socket.broadcast.emit('my response', {
-        data: 'Connected To Node Server'
+
+
+    socket.on('connect', () => {
+        console.log("Connected!")
+        socket.broadcast.emit('my response', {
+            data: 'Connected To Node Server'
+        })
     })
-  })
-  socket.on('disconnect', () => {
-    socket.broadcast.emit('my response', {
-        data: 'Disconnected'
-    })
- });
+    socket.on('disconnect', () => {
+        socket.broadcast.emit('my response', {
+            data: 'Disconnected'
+        })
+    });
 });
 
 const PORT = process.env.PORT ? process.env.PORT : 5001
