@@ -35,8 +35,7 @@ body {
   font-size: 12px;
   /* padding: 2rem; */
   /* height: 95vh; */
-  overflow: auto;
-  overflow-x: hidden;
+  overflow: hidden;
 }
 
 h3 {
