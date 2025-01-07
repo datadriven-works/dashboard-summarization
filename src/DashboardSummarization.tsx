@@ -446,28 +446,16 @@ export const DashboardSummarization: React.FC = () => {
           );
 
           return {
-            context: `
-              ### Dashboard Detail
-              ${dashboardMetadata.description || ""}
-  
-              ### Query Details
-              - **Query Title:** ${query.title}
-              - ${
-                query.note_text !== "" && query.note_text !== null
-                  ? `**Query Note:** ${
-                      query.note_text ||
-                      "Return a summary of the data in markdown format."
-                    }`
-                  : "No query note provided."
-              }
-              - **Query Fields:** ${query.queryBody.fields}
-              - **Query Data:** ${queryData}
-            `,
+            queryDescription: dashboardMetadata.description,
+            queryTitle: query.title,
+            queryNote: query.note_text || "No query note provided.",
+            queryFields: query.queryBody.fields,
+            queryData,
           };
         });
 
         const querySummaries = await Promise.all(queryPromises);
-        socket.emit("my event", JSON.stringify({ querySummaries }));
+        socket.emit("my event", { querySummaries });
       } else {
         console.error(
           "dashboardMetadata or dashboardMetadata.queries is undefined"
@@ -478,17 +466,6 @@ export const DashboardSummarization: React.FC = () => {
       console.log("error to run consults", error);
       setLoading(false);
     }
-
-    // console.log(queriesArray);
-    // socket.emit(
-    //   "my event",
-    //   JSON.stringify({
-    //     ...dashboardMetadata,
-    //     instance: extensionSDK.lookerHostData?.hostOrigin
-    //       ?.split("https://")[1]
-    //       .split(".")[0],
-    //   })
-    // );
   };
 
   return (
