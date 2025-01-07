@@ -435,16 +435,28 @@ export const DashboardSummarization: React.FC = () => {
     try {
       if (dashboardMetadata && dashboardMetadata.queries) {
         const queryPromises = dashboardMetadata.queries.map(async (query) => {
-          const queryData = await core40SDK.ok(
-            core40SDK.run_inline_query({
-              body: query.queryBody,
-              result_format: "csv",
-              cache: true,
-              apply_formatting: true,
-              limit: 200,
-            })
-          );
-
+          let queryData;
+          try {
+            queryData = await core40SDK.ok(
+              core40SDK.run_inline_query({
+                body: query.queryBody,
+                result_format: "csv",
+                cache: true,
+                apply_formatting: true,
+                limit: 200,
+              })
+            );
+            console.log("queryData: ", queryData);
+            console.log("query: ", query);
+            console.log("dashboardMetadata.description: ", dashboardMetadata.description);
+          } catch (err) {
+            // Handle the failure of this specific query
+            console.error("Error running inline query: ", err);
+            // Decide how you want to handle the data if the query fails:
+            // e.g., set to null, empty string, or an empty array
+            queryData = null; 
+          }
+    
           return {
             queryDescription: dashboardMetadata.description,
             queryTitle: query.title,
@@ -453,19 +465,18 @@ export const DashboardSummarization: React.FC = () => {
             queryData,
           };
         });
-
+    
         const querySummaries = await Promise.all(queryPromises);
         socket.emit("my event", { querySummaries });
       } else {
-        console.error(
-          "dashboardMetadata or dashboardMetadata.queries is undefined"
-        );
+        console.error("dashboardMetadata or dashboardMetadata.queries is undefined");
         setLoading(false);
       }
     } catch (error) {
-      console.log("error to run consults", error);
+      console.error("ERROR", error);
       setLoading(false);
     }
+    
   };
 
   return (
